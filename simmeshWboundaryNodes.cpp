@@ -145,25 +145,32 @@ int main(int argc, char *argv[]) {
     pACase meshCase = MS_newMeshCase(model);
 
     // specify mesh nodes and edges on wall
-    for (size_t i = 0; i < nWallPoints; ++i) {
+    for (int i = 0; i < nWallPoints; ++i) {
       double pos[3];
       GV_point(vertices[i], pos);
       MS_specifyVertex(mesh, pos, NULL, vertices[i], i);
-      // MS_specifyVertex(mesh, pos, NULL, edges[i-1<nWallPoints ? i-1 :
-      // nWallPoints-1], -1);
     }
-    for (int i = 0; i < nWallPoints;
-         ++i) { // done separately to specify vertices first
+    // done separately to specify vertices first
+    // they will not work together
+    for (int i = 0; i < nWallPoints; ++i) {
       const int vertTags[2]{i, (i + 1) % nWallPoints};
       MS_specifyEdge(mesh, vertTags, edges[i], i);
     }
 
     // set global mesh size
     pModelItem modelDomain = GM_domain(model);
-    MS_setMeshSize(meshCase, modelDomain, 2, 0.01, NULL);
+    MS_setMeshSize(meshCase, face, 2, 0.05, NULL);
+    MS_setGlobalSizeGradationRate(meshCase, 0.2);
+
+    for (int i = 0; i < nWallPoints; ++i) {
+      MS_setMeshSize(meshCase, edges[i], 2, 1.0, NULL);
+      // fixme propagation could be useful but causing the program to stall
+      // MS_setMeshSizePropagation(meshCase, edges[i], 2, 1, 0.3, 2.0);
+    }
 
     // generate mesh
     pSurfaceMesher surfmesh = SurfaceMesher_new(meshCase, mesh);
+    SurfaceMesher_setEnforceSpatialGradation(surfmesh, 1);
     SurfaceMesher_execute(surfmesh, progress);
 
     // write mesh to file

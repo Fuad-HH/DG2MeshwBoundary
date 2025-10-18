@@ -116,6 +116,19 @@ int main(int argc, char *argv[]) {
     pGModel model = GImporter_complete(importer);
     GImporter_delete(importer);
 
+    // check that the input model is topologically valid before meshing
+    pPList modelErrors = PList_new();
+    if (!GM_isValid(model, 0, modelErrors)) {
+      std::cerr << "Generated model not valid. Try running the program in "
+                   "debug mode and check printed parameter and check the log."
+                << std::endl;
+      std::cerr << "Number of errors returned: " << PList_size(modelErrors)
+                << std::endl;
+      GM_release(model);
+      return 1;
+    }
+    PList_delete(modelErrors);
+
     GM_setDisplayTolerance(model, 0.5);
     std::cout << "Number of vertices in model: " << GM_numVertices(model)
               << std::endl;
@@ -127,7 +140,40 @@ int main(int argc, char *argv[]) {
               << std::endl;
     GM_write(model, (output_name + ".smd").c_str(), 0, progress);
 
+    // ************* Create Mesh *****************//
+    pMesh mesh = M_new(0, model);
+    pACase meshCase = MS_newMeshCase(model);
+
+    // specify mesh nodes and edges on wall
+    for (size_t i = 0; i < nWallPoints; ++i) {
+      double pos[3];
+      GV_point(vertices[i], pos);
+      MS_specifyVertex(mesh, pos, NULL, vertices[i], i);
+      // MS_specifyVertex(mesh, pos, NULL, edges[i-1<nWallPoints ? i-1 :
+      // nWallPoints-1], -1);
+    }
+    for (int i = 0; i < nWallPoints;
+         ++i) { // done separately to specify vertices first
+      const int vertTags[2]{i, (i + 1) % nWallPoints};
+      MS_specifyEdge(mesh, vertTags, edges[i], i);
+    }
+
+    // set global mesh size
+    pModelItem modelDomain = GM_domain(model);
+    MS_setMeshSize(meshCase, modelDomain, 2, 0.01, NULL);
+
+    // generate mesh
+    pSurfaceMesher surfmesh = SurfaceMesher_new(meshCase, mesh);
+    SurfaceMesher_execute(surfmesh, progress);
+
+    // write mesh to file
+    M_write(mesh, (output_name + ".sms").c_str(), 0, progress);
+    printf("[INFO] Mesh written to file: %s.sms\n", output_name.c_str());
+
     // ************* Clean Up *****************//
+    SurfaceMesher_delete(surfmesh);
+    MS_deleteMeshCase(meshCase);
+    M_release(mesh);
     GM_release(model);
     Progress_delete(progress);
     MS_exit();
@@ -232,7 +278,7 @@ void findCornerXptYpt(const std::vector<std::array<double, 2>> &wallCoords,
   printf("Corner: (%.6f, %.6f, %.6f)\n", corner[0], corner[1], corner[2]);
   printf("Xpt: (%.6f, %.6f, %.6f)\n", xpt[0], xpt[1], xpt[2]);
   printf("Ypt: (%.6f, %.6f, %.6f)\n", ypt[0], ypt[1], ypt[2]);
-#endif  
+#endif
 }
 
 bool isCounterClockwise(const std::vector<std::array<double, 2>> &wallCoords) {

@@ -5,21 +5,32 @@
 
 #include <array>
 #include <assert.h>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <vector>
 
 #include "MeshSim.h"
 #include "MeshTypes.h"
-#include "ModelEnums.h"
 #include "ModelTypes.h"
-#include "SimAdvModel.h"
 #include "SimCreateModel.h"
 #include "SimDisplay.h"
 #include "SimInfo.h"
 #include "SimModel.h"
 #include "SimPList.h"
 #include "SimUtil.h"
+
+// user data passed to the size expression
+struct SizeFieldParams {
+  double center[3]; // cx, cy, cz
+  double maxSize;   // size at center (must be > 0)
+  double minSize;   // minimum allowed size (must be > 0 and <= maxSize)
+  double sigma;     // gaussian std-dev (controls falloff), > 0
+};
+
+// Gaussian-based size function: size = minSize + (maxSize - minSize) *
+// exp(-dist^2/(2*sigma^2))
+double centerMaxSizeExpr(const double gpt[3], void *userdata);
 
 void messageHandler(int type, const char *msg);
 std::vector<std::array<double, 2>>
@@ -103,10 +114,10 @@ int main(int argc, char *argv[]) {
           GImporter_createEdge(importer, v_start, v_end, linearCurve, 0, 1, 1);
     }
 
-    double corner[3], xpt[3], ypt[3];
-    findCornerXptYpt(wallCoords, corner, xpt, ypt);
+    double lowerleft_corner[3], xpt[3], ypt[3];
+    findCornerXptYpt(wallCoords, lowerleft_corner, xpt, ypt);
 
-    pSurface planarSurface = SSurface_createPlane(corner, xpt, ypt);
+    pSurface planarSurface = SSurface_createPlane(lowerleft_corner, xpt, ypt);
     std::vector<int> facedirs(nWallPoints, 1);
     int loopIndex[1] = {0};
     pGFace face =
@@ -156,16 +167,27 @@ int main(int argc, char *argv[]) {
       const int vertTags[2]{i, (i + 1) % nWallPoints};
       MS_specifyEdge(mesh, vertTags, edges[i], i);
     }
-
+    // center of the mesh
+    double center[3] = {0.5 * (lowerleft_corner[0] + xpt[0]),
+                        0.5 * (lowerleft_corner[1] + ypt[1]), 0.0};
+    SizeFieldParams params = {
+        {center[0], center[1], center[2]}, // center
+        0.1,                               // maxSize at center
+        0.005,                             // minSize
+        0.05                               // sigma
+    };
+    void *size_exp =
+        MS_registerSizeExprFunc("centerMaxSize", centerMaxSizeExpr, &params);
+    MS_setMeshSize(meshCase, face, 2, 0.0, "centerMaxSize($x,$y,$z)");
     // set global mesh size
     pModelItem modelDomain = GM_domain(model);
-    MS_setMeshSize(meshCase, face, 2, 0.05, NULL);
-    MS_setGlobalSizeGradationRate(meshCase, 0.2);
+    // MS_setMeshSize(meshCase, face, 2, 0.5, NULL);
+    // MS_setGlobalSizeGradationRate(meshCase, 0.2);
 
     for (int i = 0; i < nWallPoints; ++i) {
-      MS_setMeshSize(meshCase, edges[i], 2, 1.0, NULL);
-      // fixme propagation could be useful but causing the program to stall
-      // MS_setMeshSizePropagation(meshCase, edges[i], 2, 1, 0.3, 2.0);
+      // MS_setMeshSize(meshCase, edges[i], 2, 1.0, NULL);
+      //  fixme propagation could be useful but causing the program to stall
+      //  MS_setMeshSizePropagation(meshCase, edges[i], 2, 1, 0.3, 2.0);
     }
 
     // generate mesh
@@ -327,4 +349,32 @@ create_vertices(const std::vector<std::array<double, 2>> &wallCoords,
     vertices[index] = GImporter_createVertex(importer, coords);
   }
   return vertices;
+}
+
+double centerMaxSizeExpr(const double gpt[3], void *userdata) {
+  auto *p = static_cast<const SizeFieldParams *>(userdata);
+  if (!p || p->sigma <= 0.0 || p->maxSize <= 0.0 || p->minSize <= 0.0) {
+    std::string error_msg = "Invalid SizeFieldParams: ";
+    if (!p)
+      error_msg += "nullptr userdata. ";
+    if (p && p->sigma <= 0.0)
+      error_msg += "sigma <= 0.0. ";
+    if (p && p->maxSize <= 0.0)
+      error_msg += "maxSize <= 0.0. ";
+    if (p && p->minSize <= 0.0)
+      error_msg += "minSize <= 0.0. ";
+    throw std::runtime_error(error_msg);
+  }
+  double dx = gpt[0] - p->center[0];
+  double dy = gpt[1] - p->center[1];
+  double dz = gpt[2] - p->center[2];
+  double dist2 = dx * dx + dy * dy + dz * dz;
+  double exponent = -dist2 / (2.0 * p->sigma * p->sigma);
+  double value = p->minSize + (p->maxSize - p->minSize) * std::exp(exponent);
+  // ensure positive and at least minSize
+  if (value < p->minSize)
+    value = p->minSize;
+  if (value <= 0.0)
+    value = 1e-6;
+  return value;
 }

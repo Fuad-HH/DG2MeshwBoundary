@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0)
-project(simmeshWboundaryNodes)
+project(DG2MeshwBoundary)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
 
@@ -9,14 +9,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(SimModSuite REQUIRED)
 include_directories(${SimModSuite_INCLUDE_DIR})
 
-add_executable(simmeshWboundaryNodes simmeshWboundaryNodes.cpp)
-target_link_libraries(simmeshWboundaryNodes ${SIMMODSUITE_LIBS})
-target_include_directories(simmeshWboundaryNodes PUBLIC ${SIMMODSUITE_INCLUDE_DIR})
+add_executable(dg2MeshwBoundary DG2MeshwBoundary.cpp)
+target_link_libraries(dg2MeshwBoundary ${SIMMODSUITE_LIBS})
+target_include_directories(dg2MeshwBoundary PUBLIC ${SIMMODSUITE_INCLUDE_DIR})
 
-set_target_properties(simmeshWboundaryNodes PROPERTIES
+set_target_properties(dg2MeshwBoundary PROPERTIES
         INSTALL_RPATH_USE_LINK_PATH TRUE
         INSTALL_RPATH "$ORIGIN/../lib:$ORIGIN/../lib64"
 )
 
-install(TARGETS simmeshWboundaryNodes
+install(TARGETS dg2MeshwBoundary
          RUNTIME DESTINATION bin)

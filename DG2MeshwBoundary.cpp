@@ -1,4 +1,4 @@
-// ********************** SIMMESHWBOUNDARYNODES.CPP ************************ //
+// *************************** DG2MESHWBOUNDARY.CPP ************************ //
 // Creates simmetrix mesh from a model using a wall coordinates file to      //
 // keep boundary nodes on the wall defined.                                  //
 // ************************************************************************* //

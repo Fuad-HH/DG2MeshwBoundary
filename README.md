@@ -26,4 +26,4 @@ or just use the provided build script:
 ```
 
 ## Usage
-Will be added later.
+See examples in [EXAMPLES.md](EXAMPLES.md).

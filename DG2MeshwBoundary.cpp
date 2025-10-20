@@ -3,6 +3,12 @@
 // keep boundary nodes on the wall defined.                                  //
 // ************************************************************************* //
 
+/* ************* TODOS *******************
+ * Remove helper functions to a header file
+ * Add support for given XGC mesh instead of wall coordinates file
+ * Add support for given model
+/* ************************************** */
+
 #include <array>
 #include <assert.h>
 #include <cmath>

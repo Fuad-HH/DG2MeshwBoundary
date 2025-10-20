@@ -20,13 +20,7 @@
 #include "SimPList.h"
 #include "SimUtil.h"
 
-// user data passed to the size expression
-struct SizeFieldParams {
-  double center[3]; // cx, cy, cz
-  double maxSize;   // size at center (must be > 0)
-  double minSize;   // minimum allowed size (must be > 0 and <= maxSize)
-  double sigma;     // gaussian std-dev (controls falloff), > 0
-};
+#include "MeshConfig.h"
 
 // Gaussian-based size function: size = minSize + (maxSize - minSize) *
 // exp(-dist^2/(2*sigma^2))
@@ -41,29 +35,48 @@ bool isCounterClockwise(const std::vector<std::array<double, 2>> &wallCoords);
 std::vector<pGVertex>
 create_vertices(const std::vector<std::array<double, 2>> &wallCoords,
                 int nWallPoints, const pGImporter &importer, bool ccw);
-std::string usage_string = "Usage: %s <wallfile_name> <output_name>\n";
+std::string usage_string = "Usage: %s <input_file>\n";
 std::string help_string =
+    usage_string +
     "This program creates a Simmetrix mesh with corresponding model using a "
     "wall coordinates file to keep boundary nodes on the wall defined.\n"
     "The wall coordinates file should have the following format:\n"
     "First line: number of wall points (n)\n"
     "Next n lines: x y coordinates of each wall point\n"
-    "The wall points have to be *sequential along the wall*.\n\n" +
-    usage_string;
+    "The wall points have to be *sequential along the wall*.\n\n";
 
 int main(int argc, char *argv[]) {
-  bool asking_for_help = (argc == 2 && std::string(argv[1]) == "--help");
+  bool asking_for_help =
+      ((argc == 2 && std::string(argv[1]) == "--help") ||
+       (argc == 2 && std::string(argv[1]) == "-h") || (argc != 2));
   if (asking_for_help) {
-    printf(help_string.c_str(), argv[0]);
+    printf("%s", help_string.c_str());
     return 0;
   }
-  if (argc != 3) {
-    printf(usage_string.c_str(), argv[0]);
-    return 1;
-  }
 
-  std::string wallFile = argv[1];
-  std::string output_name = argv[2];
+  MeshConfig meshConfig(argv[1]);
+  meshConfig.printParams();
+
+  std::string wallFile = meshConfig.input_wall_file;
+  std::string output_name = meshConfig.output_name;
+
+  const auto wallCoords = readWallCoordinatesFile(wallFile);
+  bool ccw = isCounterClockwise(wallCoords);
+  int nWallPoints = wallCoords.size();
+  std::cout << "[INFO] Wall coordinates read from file: " << wallFile
+            << " with " << nWallPoints << " points." << std::endl;
+  std::cout << "[INFO] Wall points are in "
+            << (ccw ? "*counter-clockwise*" : "*clockwise*") << " order."
+            << std::endl;
+
+#ifndef NDEBUG
+  printf("Wall Points:\n");
+  for (size_t i = 0; i < nWallPoints; ++i) {
+    double coords[3] = {wallCoords[i][0], wallCoords[i][1], 0.0};
+    printf("[INFO] Wall Point %zu: (%.6f, %.6f, %.6f)\n", i + 1, coords[0],
+           coords[1], coords[2]);
+  }
+#endif
 
   try {
     Sim_logOn("simmeshWboundaryNodes.log");
@@ -77,24 +90,6 @@ int main(int argc, char *argv[]) {
     Sim_setMessageHandler(messageHandler);
     pProgress progress = Progress_new();
     Progress_setDefaultCallback(progress);
-
-    const auto wallCoords = readWallCoordinatesFile(wallFile);
-    bool ccw = isCounterClockwise(wallCoords);
-    int nWallPoints = wallCoords.size();
-    std::cout << "[INFO] Wall coordinates read from file: " << wallFile
-              << " with " << nWallPoints << " points." << std::endl;
-    std::cout << "[INFO] Wall points are in "
-              << (ccw ? "*counter-clockwise*" : "*clockwise*") << " order."
-              << std::endl;
-
-#ifndef NDEBUG
-    printf("Wall Points:\n");
-    for (size_t i = 0; i < nWallPoints; ++i) {
-      double coords[3] = {wallCoords[i][0], wallCoords[i][1], 0.0};
-      printf("[INFO] Wall Point %zu: (%.6f, %.6f, %.6f)\n", i + 1, coords[0],
-             coords[1], coords[2]);
-    }
-#endif
 
     // ************* Import Model *****************//
     pGImporter importer = GImporter_new();
@@ -169,20 +164,27 @@ int main(int argc, char *argv[]) {
     }
 
     // center of the mesh
-    double center[3] = {0.5 * (lowerleft_corner[0] + xpt[0]),
-                        0.5 * (lowerleft_corner[1] + ypt[1]), 0.0};
-    SizeFieldParams params = {
-        {center[0], center[1], center[2]}, // center
-        0.3,                               // maxSize at center
-        0.02,                              // minSize
-        0.05                               // sigma
-    };
-    void *size_exp =
-        MS_registerSizeExprFunc("centerMaxSize", centerMaxSizeExpr, &params);
-    MS_setMeshSize(meshCase, face, 2, 0.0, "centerMaxSize($x,$y,$z)");
+    void *size_exp = nullptr;
+    if (meshConfig.size_type == MeshConfig::SizeType::Gaussian) {
+      double center[3];
+      if (!meshConfig.gaussian_params.userdefinedCenter) {
+        meshConfig.gaussian_params.center[0] =
+            0.5 * (lowerleft_corner[0] + xpt[0]);
+        meshConfig.gaussian_params.center[1] =
+            0.5 * (lowerleft_corner[1] + ypt[1]);
+        meshConfig.gaussian_params.center[2] = 0.0;
+      }
+
+      size_exp = MS_registerSizeExprFunc("centerMaxSize", centerMaxSizeExpr,
+                                         &meshConfig.gaussian_params);
+      MS_setMeshSize(meshCase, face, 2, 0.0, "centerMaxSize($x,$y,$z)");
+    } else if (meshConfig.size_type == MeshConfig::SizeType::Uniform) {
+      MS_setMeshSize(meshCase, face, 2, meshConfig.uniform_size, NULL);
+    }
+
     // set global mesh size
     // MS_setMeshSize(meshCase, face, 2, 0.5, NULL);
-    MS_setGlobalSizeGradationRate(meshCase, 0.2);
+    MS_setGlobalSizeGradationRate(meshCase, meshConfig.gradation_rate);
 
     for (int i = 0; i < nWallPoints; ++i) {
       MS_setMeshSize(meshCase, edges[i], 2, 1.0, NULL);
@@ -358,9 +360,9 @@ create_vertices(const std::vector<std::array<double, 2>> &wallCoords,
 }
 
 double centerMaxSizeExpr(const double gpt[3], void *userdata) {
-  auto *p = static_cast<const SizeFieldParams *>(userdata);
+  auto *p = static_cast<const GaussSizeParams *>(userdata);
   if (!p || p->sigma <= 0.0 || p->maxSize <= 0.0 || p->minSize <= 0.0) {
-    std::string error_msg = "Invalid SizeFieldParams: ";
+    std::string error_msg = "Invalid GaussSizeParams: ";
     if (!p)
       error_msg += "nullptr userdata. ";
     if (p && p->sigma <= 0.0)

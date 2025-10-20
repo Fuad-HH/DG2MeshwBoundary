@@ -1,0 +1,16 @@
+# Input/output
+input_wall = ../test/asset/ltx_wall.dat
+output = ltx_graded_gauss
+gradation_rate = 0.2
+
+# Size field: type = fixed | gaussian
+size_field.type = gaussian
+
+# For fixed:
+# size_field.fixed = 0.05
+
+# For gaussian:
+size_field.gaussian.center = calculate
+size_field.gaussian.max = 0.3
+size_field.gaussian.min = 0.02
+size_field.gaussian.sigma = 0.05

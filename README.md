@@ -26,4 +26,8 @@ or just use the provided build script:
 ```
 
 ## Usage
-See examples in [EXAMPLES.md](EXAMPLES.md).
+```bash
+./<path_to_dg2MeshwBoundary> <inputfile>
+```
+
+See input file examples in [EXAMPLES.md](EXAMPLES.md).

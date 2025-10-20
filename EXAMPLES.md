@@ -6,8 +6,8 @@ To plot this, I used Gaussian distribution of mesh size centered at
 the center of the geometry bounding box with the following parameters:
 
 ```
-# Input/output
-input_wall = ../test/asset/ltx_wall.dat
+# Input in test/asset directory
+input_wall = ltx_wall.dat
 output = ltx_graded_gauss
 gradation_rate = 0.2
 

@@ -172,8 +172,8 @@ int main(int argc, char *argv[]) {
                         0.5 * (lowerleft_corner[1] + ypt[1]), 0.0};
     SizeFieldParams params = {
         {center[0], center[1], center[2]}, // center
-        0.1,                               // maxSize at center
-        0.005,                             // minSize
+        0.3,                               // maxSize at center
+        0.02,                             // minSize
         0.05                               // sigma
     };
     void *size_exp =
@@ -182,10 +182,10 @@ int main(int argc, char *argv[]) {
     // set global mesh size
     pModelItem modelDomain = GM_domain(model);
     // MS_setMeshSize(meshCase, face, 2, 0.5, NULL);
-    // MS_setGlobalSizeGradationRate(meshCase, 0.2);
+    MS_setGlobalSizeGradationRate(meshCase, 0.2);
 
     for (int i = 0; i < nWallPoints; ++i) {
-      // MS_setMeshSize(meshCase, edges[i], 2, 1.0, NULL);
+      MS_setMeshSize(meshCase, edges[i], 2, 1.0, NULL);
       //  fixme propagation could be useful but causing the program to stall
       //  MS_setMeshSizePropagation(meshCase, edges[i], 2, 1, 0.3, 2.0);
     }

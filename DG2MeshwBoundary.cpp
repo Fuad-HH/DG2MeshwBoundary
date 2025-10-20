@@ -167,20 +167,20 @@ int main(int argc, char *argv[]) {
       const int vertTags[2]{i, (i + 1) % nWallPoints};
       MS_specifyEdge(mesh, vertTags, edges[i], i);
     }
+
     // center of the mesh
     double center[3] = {0.5 * (lowerleft_corner[0] + xpt[0]),
                         0.5 * (lowerleft_corner[1] + ypt[1]), 0.0};
     SizeFieldParams params = {
         {center[0], center[1], center[2]}, // center
         0.3,                               // maxSize at center
-        0.02,                             // minSize
+        0.02,                              // minSize
         0.05                               // sigma
     };
     void *size_exp =
         MS_registerSizeExprFunc("centerMaxSize", centerMaxSizeExpr, &params);
     MS_setMeshSize(meshCase, face, 2, 0.0, "centerMaxSize($x,$y,$z)");
     // set global mesh size
-    pModelItem modelDomain = GM_domain(model);
     // MS_setMeshSize(meshCase, face, 2, 0.5, NULL);
     MS_setGlobalSizeGradationRate(meshCase, 0.2);
 
@@ -195,9 +195,15 @@ int main(int argc, char *argv[]) {
     SurfaceMesher_setEnforceSpatialGradation(surfmesh, 1);
     SurfaceMesher_execute(surfmesh, progress);
 
+    MS_unregisterSizeExprFunc(size_exp);
+
     // write mesh to file
     M_write(mesh, (output_name + ".sms").c_str(), 0, progress);
     printf("[INFO] Mesh written to file: %s.sms\n", output_name.c_str());
+    std::string mesh_stat = "Mesh statistics:\n"
+                            "Number of nodes: %d\n"
+                            "Number of faces: %d\n";
+    printf(mesh_stat.c_str(), M_numVertices(mesh), M_numFaces(mesh));
 
     // ************* Clean Up *****************//
     SurfaceMesher_delete(surfmesh);

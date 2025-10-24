@@ -32,6 +32,16 @@ void MeshConfig::printParams() {
     }
   }
 
+  if (!userdefined_verts.empty()) {
+    printf("  User Defined Vertices (%zu):\n", userdefined_verts.size());
+    for (size_t i = 0; i < userdefined_verts.size(); ++i) {
+      printf("   [%zu]: (%.4f, %.4f, %.4f)\n", i, userdefined_verts[i][0],
+             userdefined_verts[i][1], userdefined_verts[i][2]);
+    }
+  } else {
+    printf("  No User Defined Vertices.\n");
+  }
+
   printf("\n");
 }
 
@@ -126,6 +136,34 @@ MeshConfig::MeshConfig(const std::string &filename) {
       throw std::runtime_error("size_field.gaussian.sigma must be > 0");
   } else {
     throw std::runtime_error("Unknown size_field.type: " + stype);
+  }
+
+  // read user defined vertices
+  // two input variable, userdefined_verts.num and userdefined_verts.coords
+  // only read coords if num != 0
+  if (kv.count("userdefined_verts.num") > 0) {
+    int num_verts =
+        static_cast<int>(requireDouble(kv, "userdefined_verts.num"));
+    printf("Number of user defined vertices: %d\n", num_verts);
+    if (num_verts < 0)
+      throw std::runtime_error("userdefined_verts.num must be >= 0");
+    if (num_verts > 0) {
+      if (!kv.count("userdefined_verts.coords"))
+        throw std::runtime_error(
+            "Missing userdefined_verts.coords for user defined vertices");
+      std::string coords_str = kv.at("userdefined_verts.coords");
+      std::istringstream iss(coords_str);
+      for (int i = 0; i < num_verts; ++i) {
+        double x, y, z;
+        if (!(iss >> x >> y >> z)) {
+          throw std::runtime_error(
+              "Not enough coordinates in userdefined_verts.coords. Needs " +
+              std::to_string(num_verts * 3) + " values. But found " +
+              std::to_string(i * 3) + ".");
+        }
+        userdefined_verts.push_back({x, y, z});
+      }
+    }
   }
 }
 

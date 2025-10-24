@@ -14,3 +14,5 @@ size_field.gaussian.center = calculate
 size_field.gaussian.max = 0.3
 size_field.gaussian.min = 0.02
 size_field.gaussian.sigma = 0.05
+userdefined_verts.num = 1
+userdefined_verts.coords = 0.404 -0.0212932 0.0

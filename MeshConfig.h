@@ -6,6 +6,7 @@
 #ifndef DG2MESHWBOUNDARY_MESHCONFIG_H
 #define DG2MESHWBOUNDARY_MESHCONFIG_H
 
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -29,6 +30,8 @@ public:
   SizeType size_type = SizeType::Uniform;
   double uniform_size = 0.05;
   double gradation_rate = 0.2;
+
+  std::vector<std::array<double, 3>> userdefined_verts;
 
   GaussSizeParams gaussian_params;
 

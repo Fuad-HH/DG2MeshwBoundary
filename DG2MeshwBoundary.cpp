@@ -102,6 +102,16 @@ int main(int argc, char *argv[]) {
     const auto vertices =
         create_vertices(wallCoords, nWallPoints, importer, ccw);
 
+    // create userdefined_vertices
+    std::vector<pGVertex> userdefined_vertices(
+        meshConfig.userdefined_verts.size());
+    if (!meshConfig.userdefined_verts.empty()) {
+      for (size_t i = 0; i < meshConfig.userdefined_verts.size(); ++i) {
+        auto &v = meshConfig.userdefined_verts[i];
+        userdefined_vertices[i] = GImporter_createVertex(importer, v.data());
+      }
+    }
+
     std::vector<pGEdge> edges(nWallPoints);
     for (size_t i = 0; i < nWallPoints; ++i) {
       pGVertex v_start = vertices[i];
@@ -162,6 +172,15 @@ int main(int argc, char *argv[]) {
       GV_point(vertices[i], pos);
       MS_specifyVertex(mesh, pos, NULL, vertices[i], i);
     }
+    // userdefined_verts on the face
+    for (int i = 0; i < meshConfig.userdefined_verts.size(); ++i) {
+      const auto &v = meshConfig.userdefined_verts[i];
+      // had to classify the mesh vertices on geometric vertices
+      // classifying on the face was not working (got stuck during meshing)
+      MS_specifyVertex(mesh, v.data(), 0, userdefined_vertices[i],
+                       nWallPoints + i); // tag after wall points
+    }
+
     // done separately to specify vertices first
     // they will not work together
     for (int i = 0; i < nWallPoints; ++i) {

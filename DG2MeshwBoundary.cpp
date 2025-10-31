@@ -7,13 +7,16 @@
  * Remove helper functions to a header file
  * Add support for given XGC mesh instead of wall coordinates file
  * Add support for given model
-/* ************************************** */
+ * ************************************** */
 
 #include <array>
-#include <assert.h>
+#include <cassert>
 #include <cmath>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #include "MeshSim.h"
@@ -50,6 +53,8 @@ std::string help_string =
     "First line: number of wall points (n)\n"
     "Next n lines: x y coordinates of each wall point\n"
     "The wall points have to be *sequential along the wall*.\n\n";
+
+void check_mesh_wall(const std::vector<pGEdge> &edges, const pMesh *mesh);
 
 int main(int argc, char *argv[]) {
   bool asking_for_help =
@@ -212,7 +217,11 @@ int main(int argc, char *argv[]) {
     MS_setGlobalSizeGradationRate(meshCase, meshConfig.gradation_rate);
 
     for (int i = 0; i < nWallPoints; ++i) {
-      MS_setMeshSize(meshCase, edges[i], 2, 1.0, NULL);
+      // calculate edge size based on edge length
+      const auto &edge = edges[i];
+      const double edge_len = GE_length(edge);
+
+      MS_setMeshSize(meshCase, edges[i], 1, edge_len * 4, NULL);
       //  fixme propagation could be useful but causing the program to stall
       //  MS_setMeshSizePropagation(meshCase, edges[i], 2, 1, 0.3, 2.0);
     }
@@ -224,7 +233,9 @@ int main(int argc, char *argv[]) {
 
     MS_unregisterSizeExprFunc(size_exp);
 
-    // write mesh to file
+    // validity check
+    check_mesh_wall(edges, &mesh);
+
     M_write(mesh, (output_name + ".sms").c_str(), 0, progress);
     printf("[INFO] Mesh written to file: %s.sms\n", output_name.c_str());
     std::string mesh_stat = "Mesh statistics:\n"
@@ -410,4 +421,25 @@ double centerMaxSizeExpr(const double gpt[3], void *userdata) {
   if (value <= 0.0)
     value = 1e-6;
   return value;
+}
+
+void check_mesh_wall(const std::vector<pGEdge> &edges, const pMesh *mesh) {
+  EIter edge_iter = M_edgeIter(*mesh);
+  int boundary_edge_count = 0;
+
+  while (const pEdge &edge = EIter_next(edge_iter)) {
+    int n_adj_faces = E_numFaces(edge);
+    if (n_adj_faces == 1) {
+      boundary_edge_count++;
+    }
+  }
+  EIter_delete(edge_iter);
+
+  if (boundary_edge_count != edges.size()) {
+    std::string error_message = "Mesh boundary edge count (" +
+                                std::to_string(boundary_edge_count) +
+                                ") does not match expected wall edge count (" +
+                                std::to_string(edges.size()) + ").";
+    throw std::runtime_error(error_message);
+  }
 }

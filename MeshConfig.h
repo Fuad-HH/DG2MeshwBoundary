@@ -25,6 +25,7 @@ public:
 
   // Parsed fields
   std::string input_wall_file;
+  std::string input_model_file;
   std::string output_name;
 
   SizeType size_type = SizeType::Uniform;

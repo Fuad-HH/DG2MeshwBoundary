@@ -37,8 +37,17 @@
 double centerMaxSizeExpr(const double gpt[3], void *userdata);
 
 void messageHandler(int type, const char *msg);
+std::vector<std::array<double, 2>> readWall(const MeshConfig &config, bool &ccw,
+                                            pProgress progress);
 std::vector<std::array<double, 2>>
 readWallCoordinatesFile(const std::string &filename);
+std::vector<std::array<double, 2>>
+readWallFromXGCNodeFile(const std::string &filename);
+std::vector<std::array<double, 2>>
+readWallFromSimMesh(const std::string &model_filename,
+                    const std::string &mesh_filename, pProgress progress);
+bool endsWith(const std::string &fullString,
+              const std::string &ending);
 void findCornerXptYpt(const std::vector<std::array<double, 2>> &wallCoords,
                       double corner[3], double xpt[3], double ypt[3]);
 bool isCounterClockwise(const std::vector<std::array<double, 2>> &wallCoords);
@@ -68,27 +77,7 @@ int main(int argc, char *argv[]) {
 
   MeshConfig meshConfig(argv[1]);
   meshConfig.printParams();
-
-  std::string wallFile = meshConfig.input_wall_file;
   std::string output_name = meshConfig.output_name;
-
-  const auto wallCoords = readWallCoordinatesFile(wallFile);
-  bool ccw = isCounterClockwise(wallCoords);
-  int nWallPoints = wallCoords.size();
-  std::cout << "[INFO] Wall coordinates read from file: " << wallFile
-            << " with " << nWallPoints << " points." << std::endl;
-  std::cout << "[INFO] Wall points are in "
-            << (ccw ? "*counter-clockwise*" : "*clockwise*") << " order."
-            << std::endl;
-
-#ifndef NDEBUG
-  printf("Wall Points:\n");
-  for (size_t i = 0; i < nWallPoints; ++i) {
-    double coords[3] = {wallCoords[i][0], wallCoords[i][1], 0.0};
-    printf("[INFO] Wall Point %zu: (%.6f, %.6f, %.6f)\n", i + 1, coords[0],
-           coords[1], coords[2]);
-  }
-#endif
 
   try {
     Sim_logOn("simmeshWboundaryNodes.log");
@@ -102,6 +91,11 @@ int main(int argc, char *argv[]) {
     Sim_setMessageHandler(messageHandler);
     pProgress progress = Progress_new();
     Progress_setDefaultCallback(progress);
+
+    // ************* Read Wall Coordinates *****************//
+    bool ccw = true;
+    std::vector<std::array<double, 2>> wallCoords = readWall(meshConfig, ccw, progress);
+    const int nWallPoints = wallCoords.size();
 
     // ************* Import Model *****************//
     pGImporter importer = GImporter_new();
@@ -296,6 +290,124 @@ void messageHandler(int type, const char *msg) {
   }
 }
 
+std::vector<std::array<double, 2>> readWallFromSimMesh(const std::string &model_filename, const std::string &mesh_filename, pProgress progress) {
+  const auto model = GM_load(model_filename.c_str(), NULL, progress);
+  const auto mesh = M_load(mesh_filename.c_str(), model, progress);
+
+  // find the leftmost mesh vertex to start searching for wall vertices
+  VIter v_iter = M_vertexIter(mesh);
+  pVertex leftmost_vertex = nullptr;
+  pVertex current_vertex = nullptr;
+
+  while (current_vertex = VIter_next(v_iter)) {
+    if (!leftmost_vertex) {
+      leftmost_vertex = current_vertex;
+    } else {
+      double current_coords[3];
+      double leftmost_coords[3];
+      V_coord(current_vertex, current_coords);
+      V_coord(leftmost_vertex, leftmost_coords);
+      if (current_coords[0] < leftmost_coords[0]) {
+        leftmost_vertex = current_vertex;
+      }
+    }
+  }
+  VIter_delete(v_iter);
+
+  // traverse the boundary edges to collect wall vertices
+  std::vector<std::array<double, 2>> wall_points;
+  current_vertex = leftmost_vertex;
+  pEdge last_boundary_edge = nullptr;
+  while (true) {
+    pEdge current_boundary_edge = nullptr;
+    const int n_adj_edges = V_numEdges(current_vertex);
+    for ( int i = 0; i < n_adj_edges; ++i) {
+      current_boundary_edge = V_edge(current_vertex, i);
+      if (E_numFaces(current_boundary_edge) == 1 && current_boundary_edge != last_boundary_edge) {
+        last_boundary_edge = current_boundary_edge;
+        break;
+      }
+    }
+    if (current_boundary_edge == nullptr) {
+      double current_coords[3];
+      V_coord(current_vertex, current_coords);
+      printf("Error: For vertex at (%.6f, %.6f, %.6f), no boundary edge found but it has %d adjacent edges.\n",
+             current_coords[0], current_coords[1], current_coords[2], n_adj_edges);
+      std::abort();
+    }
+
+    // find the next vertex on the boundary edge
+    current_vertex = E_otherVertex(current_boundary_edge, current_vertex);
+
+    // store the vertex coordinates
+    double coords[3];
+    V_coord(current_vertex, coords);
+    wall_points.push_back({coords[0], coords[1]});
+
+    // complete the loop
+    if (current_vertex == leftmost_vertex) {
+      break; // completed the loop
+    }
+  }
+
+  return wall_points;
+}
+
+
+std::vector<std::array<double, 2>> readWallFromXGCNodeFile(
+    const std::string &filename) {
+  printf("[Warning] Reading wall coordinates from XGC %s file. As of"
+         "this writing, .node file does not contain wall nodes in order.", filename.c_str());
+  std::ifstream infile(filename);
+  if (!infile.is_open()) {
+    throw std::runtime_error("Cannot open file: " + filename);
+  }
+
+  size_t boundary_point_count = 0;
+  size_t total_point_count = 0;
+  size_t dim = 0;
+  size_t n_attributes = 0;
+  size_t n_boundary_attrs = 0;
+
+  // Read Header
+  infile >> total_point_count >> dim >> n_attributes >> n_boundary_attrs;
+  if ( total_point_count < 3 || dim != 2 || n_attributes != 0 ||
+      n_boundary_attrs != 1) {
+    std::string error_msg = "In file " + filename +
+                            ", invalid header values: ";
+    error_msg += "total_point_count=" + std::to_string(total_point_count) +
+                 ", dim=" + std::to_string(dim) +
+                 ", n_attributes=" + std::to_string(n_attributes) +
+                 ", n_boundary_attrs=" + std::to_string(n_boundary_attrs) + ".";
+    throw std::runtime_error(error_msg);
+  }
+
+  std::vector<std::array<double, 2>> boundary_points;
+  // will strip the extra later
+  boundary_points.reserve(total_point_count);
+
+  double x, y;
+  bool is_boundary;
+  size_t node_id;
+
+  for (size_t i = 0; i < total_point_count; ++i) {
+    if (!(infile >> node_id >> x >> y >> is_boundary)) {
+      throw std::runtime_error("Error reading point at line " +
+                               std::to_string(i + 2));
+    }
+
+    if (is_boundary) {
+      boundary_points.push_back({x, y});
+      boundary_point_count++;
+    }
+  }
+
+  // Resize to actual boundary point count
+  boundary_points.resize(boundary_point_count);
+  return boundary_points;
+}
+
+
 std::vector<std::array<double, 2>>
 readWallCoordinatesFile(const std::string &filename) {
   std::ifstream infile(filename);
@@ -455,3 +567,60 @@ void check_mesh_wall(const std::vector<pGEdge> &edges, const pMesh *mesh) {
     throw std::runtime_error(error_message);
   }
 }
+// Function to check if a string ends with another string
+bool endsWith(const std::string& fullString,
+              const std::string& ending)
+{
+  // Check if the ending string is longer than the full
+  // string
+  if (ending.size() > fullString.size())
+    return false;
+
+  // Compare the ending of the full string with the target
+  // ending
+  return fullString.compare(fullString.size()
+                                - ending.size(),
+                            ending.size(), ending)
+         == 0;
+}
+
+std::vector<std::array<double, 2>> readWall(const MeshConfig& config, bool &ccw, pProgress progress) {
+  std::string wallFile = config.input_wall_file;
+
+  std::vector<std::array<double, 2>> wallCoords;
+  const bool is_wall_file_xgc_node = endsWith(wallFile, ".node");
+  const bool is_wall_file_sim_mesh = endsWith(wallFile, ".sms");
+  if (is_wall_file_xgc_node) {
+    wallCoords = readWallFromXGCNodeFile(wallFile);
+  } else if (is_wall_file_sim_mesh) {
+    std::string model_file = config.input_model_file;
+    if (model_file.empty()) {
+      throw std::runtime_error("When wall file is a Simmetrix mesh (.sms), "
+                               "the input model file must be provided in the "
+                               "configuration.");
+    }
+    wallCoords = readWallFromSimMesh(model_file, wallFile, progress);
+  } else {
+    wallCoords = readWallCoordinatesFile(wallFile);
+  }
+
+  ccw = isCounterClockwise(wallCoords);
+  int nWallPoints = wallCoords.size();
+  std::cout << "[INFO] Wall coordinates read from file: " << wallFile
+      << " with " << nWallPoints << " points." << std::endl;
+  std::cout << "[INFO] Wall points are in "
+      << (ccw ? "*counter-clockwise*" : "*clockwise*") << " order."
+      << std::endl;
+
+#ifndef NDEBUG
+  printf("Wall Points:\n");
+  for (size_t i = 0; i < nWallPoints; ++i) {
+    double coords[3] = {wallCoords[i][0], wallCoords[i][1], 0.0};
+    printf("[INFO] Wall Point %zu: (%.6f, %.6f, %.6f)\n", i + 1, coords[0],
+           coords[1], coords[2]);
+  }
+#endif
+
+  return wallCoords;
+}
+

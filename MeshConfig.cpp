@@ -81,6 +81,10 @@ MeshConfig::MeshConfig(const std::string &filename) {
     throw std::runtime_error("Missing input_wall or input_wall_file in config");
   input_wall_file = getValue(kv, {"input_wall", "input_wall_file"});
 
+  if (kv.count("input_model_file") != 0) {
+    input_model_file = getValue(kv, {"input_model_file", "input_model"});
+  }
+
   if (kv.count("output") == 0)
     throw std::runtime_error("Missing output in config");
   output_name = kv.at("output");

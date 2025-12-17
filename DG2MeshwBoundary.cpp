@@ -18,6 +18,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <vector>
+#include <algorithm>
 
 #include "MeshSim.h"
 #include "MeshTypes.h"
@@ -216,14 +217,25 @@ int main(int argc, char *argv[]) {
     // MS_setMeshSize(meshCase, face, 2, 0.5, NULL);
     MS_setGlobalSizeGradationRate(meshCase, meshConfig.gradation_rate);
 
+    std::vector<double> edge_lengths(nWallPoints);
     for (int i = 0; i < nWallPoints; ++i) {
       // calculate edge size based on edge length
       const auto &edge = edges[i];
       const double edge_len = GE_length(edge);
+      edge_lengths[i] = edge_len;
 
-      MS_setMeshSize(meshCase, edges[i], 1, edge_len * 4, NULL);
+      //MS_setMeshSize(meshCase, edges[i], 1, edge_len * 5.0, NULL);
       //  fixme propagation could be useful but causing the program to stall
       //  MS_setMeshSizePropagation(meshCase, edges[i], 2, 1, 0.3, 2.0);
+    }
+
+    double max_edge_length = *std::max_element(edge_lengths.begin(), edge_lengths.end());
+    std::cout << "[INFO] Maximum wall edge length: " << max_edge_length
+              << std::endl;
+
+    for (int i = 0; i < nWallPoints; ++i) {
+      const auto &edge = edges[i];
+      MS_setMeshSize(meshCase, edge, 1, max_edge_length, NULL);
     }
 
     // generate mesh

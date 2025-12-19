@@ -165,6 +165,7 @@ int main(int argc, char *argv[]) {
     // ************* Create Mesh *****************//
     pMesh mesh = M_new(0, model);
     pACase meshCase = MS_newMeshCase(model);
+    pMeshNex meshNex = MeshNex_new(mesh);
 
     // specify mesh nodes and edges on wall
     for (int i = 0; i < nWallPoints; ++i) {
@@ -249,7 +250,13 @@ int main(int argc, char *argv[]) {
                             "Number of faces: %d\n";
     printf(mesh_stat.c_str(), M_numVertices(mesh), M_numFaces(mesh));
 
-    // ************* Clean Up *****************//
+    MeshNex_setNodeDefault(meshNex, 1, 0);
+
+    MeshNex_write(meshNex, (output_name + ".nex").c_str());
+    printf("Nex file written to file: %s.nex\n", output_name.c_str());
+
+    // ************* Clean Up ***************** //
+    MeshNex_delete(meshNex);
     SurfaceMesher_delete(surfmesh);
     MS_deleteMeshCase(meshCase);
     M_release(mesh);

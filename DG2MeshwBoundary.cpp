@@ -92,12 +92,12 @@ int main(int argc, char *argv[]) {
     pProgress progress = Progress_new();
     Progress_setDefaultCallback(progress);
 
-    // ************* Read Wall Coordinates *****************//
+    // ************* Read Wall Coordinates ***************** //
     bool ccw = true;
     std::vector<std::array<double, 2>> wallCoords = readWall(meshConfig, ccw, progress);
     const int nWallPoints = wallCoords.size();
 
-    // ************* Import Model *****************//
+    // ************* Import Model ***************** //
     pGImporter importer = GImporter_new();
     const auto vertices =
         create_vertices(wallCoords, nWallPoints, importer, ccw);
@@ -123,6 +123,10 @@ int main(int argc, char *argv[]) {
       pCurve linearCurve = SCurve_createLine(p_start, p_end);
       edges[i] =
           GImporter_createEdge(importer, v_start, v_end, linearCurve, 0, 1, 1);
+
+      if (GEN_setNativeIntAttribute(edges[i], 3, "xgcType")>0) {
+        throw std::runtime_error(std::string("Falied to set attribute at ")+std::to_string(i));
+      }
     }
 
     double lowerleft_corner[3], xpt[3], ypt[3];

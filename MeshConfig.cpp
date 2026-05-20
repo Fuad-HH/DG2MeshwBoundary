@@ -30,6 +30,10 @@ void MeshConfig::printParams() {
              gaussian_params.center[0], gaussian_params.center[1],
              gaussian_params.center[2]);
     }
+  } else if (size_type == SizeType::PropR) {
+    printf("  Size Field Type: PropR\n");
+    printf("  PropR Min Size: %.4f\n", propR_params.minSize);
+    printf("  PropR Max Size: %.4f\n", propR_params.maxSize);
   }
 
   if (!userdefined_verts.empty()) {
@@ -138,6 +142,17 @@ MeshConfig::MeshConfig(const std::string &filename) {
       throw std::runtime_error("size_field.gaussian.min must be <= max");
     if (gaussian_params.sigma <= 0.0)
       throw std::runtime_error("size_field.gaussian.sigma must be > 0");
+  } else if (stype == "propr") {
+    size_type = SizeType::PropR;
+    propR_params.minSize = requireDouble(kv, "size_field.propr.min");
+    propR_params.maxSize = requireDouble(kv, "size_field.propr.max");
+
+    if (propR_params.minSize <= 0.0)
+      throw std::runtime_error("size_field.propR.min must be > 0");
+    if (propR_params.maxSize <= 0.0)
+      throw std::runtime_error("size_field.propR.max must be > 0");
+    if (propR_params.minSize > propR_params.maxSize)
+      throw std::runtime_error("size_field.propR.min must be <= max");
   } else {
     throw std::runtime_error("Unknown size_field.type: " + stype);
   }

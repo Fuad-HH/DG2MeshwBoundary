@@ -19,9 +19,16 @@ struct GaussSizeParams {
   double sigma = 0.0;
 };
 
+struct PropRSizeParams {
+  double minSize = 0.0;
+  double maxSize = 0.0;
+  double xMin = 0.0;
+  double xMax = 0.0;
+};
+
 class MeshConfig {
 public:
-  enum class SizeType { Uniform, Gaussian };
+  enum class SizeType { Uniform, Gaussian, PropR };
 
   // Parsed fields
   std::string input_wall_file;
@@ -35,6 +42,7 @@ public:
   std::vector<std::array<double, 3>> userdefined_verts;
 
   GaussSizeParams gaussian_params;
+  PropRSizeParams propR_params;
 
   // Load and parse config file, throws std::runtime_error on error
   explicit MeshConfig(const std::string &filename);

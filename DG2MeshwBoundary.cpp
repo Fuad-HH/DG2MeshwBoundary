@@ -36,6 +36,10 @@
 // exp(-dist^2/(2*sigma^2))
 double centerMaxSizeExpr(const double gpt[3], void *userdata);
 
+// Proportional-to-R size function: linearly interpolates from minSize
+// at xMin to maxSize at xMax
+double propRSizeExpr(const double gpt[3], void *userdata);
+
 void messageHandler(int type, const char *msg);
 std::vector<std::array<double, 2>> readWall(const MeshConfig &config, bool &ccw,
                                             pProgress progress);
@@ -207,9 +211,16 @@ int main(int argc, char *argv[]) {
 
       size_exp = MS_registerSizeExprFunc("centerMaxSize", centerMaxSizeExpr,
                                          &meshConfig.gaussian_params);
-      MS_setMeshSize(meshCase, face, 2, 0.0, "centerMaxSize($x,$y,$z)");
+      MS_setMeshSize(meshCase, face, 2, 0.0, "centerMaxSize($x, $y, $z)");
     } else if (meshConfig.size_type == MeshConfig::SizeType::Uniform) {
       MS_setMeshSize(meshCase, face, 2, meshConfig.uniform_size, NULL);
+    } else if (meshConfig.size_type == MeshConfig::SizeType::PropR) {
+      meshConfig.propR_params.xMin = lowerleft_corner[0];
+      meshConfig.propR_params.xMax = xpt[0];
+
+      size_exp = MS_registerSizeExprFunc("propRSize", propRSizeExpr,
+                                         &meshConfig.propR_params);
+      MS_setMeshSize(meshCase, face, 2, 0.0, "propRSize($x, $y, $z)");
     }
 
     // set global mesh size
@@ -242,7 +253,8 @@ int main(int argc, char *argv[]) {
     SurfaceMesher_setEnforceSpatialGradation(surfmesh, 1);
     SurfaceMesher_execute(surfmesh, progress);
 
-    MS_unregisterSizeExprFunc(size_exp);
+    if (size_exp)
+      MS_unregisterSizeExprFunc(size_exp);
 
     // validity check
     check_mesh_wall(edges, &mesh);
@@ -553,6 +565,27 @@ double centerMaxSizeExpr(const double gpt[3], void *userdata) {
   // ensure positive and at least minSize
   if (value < p->minSize)
     value = p->minSize;
+  if (value <= 0.0)
+    value = 1e-6;
+  return value;
+}
+
+double propRSizeExpr(const double gpt[3], void *userdata) {
+  auto *p = static_cast<const PropRSizeParams *>(userdata);
+  if (!p || p->maxSize <= 0.0 || p->minSize <= 0.0) {
+    std::string error_msg = "Invalid PropRSizeParams: ";
+    if (!p)
+      error_msg += "nullptr userdata. ";
+    if (p && p->maxSize <= 0.0)
+      error_msg += "maxSize <= 0.0. ";
+    if (p && p->minSize <= 0.0)
+      error_msg += "minSize <= 0.0. ";
+    throw std::runtime_error(error_msg);
+  }
+  double range = p->xMax - p->xMin;
+  double t = (range > 0.0) ? (gpt[0] - p->xMin) / range : 0.0;
+  t = std::max(0.0, std::min(1.0, t));
+  double value = p->minSize + t * (p->maxSize - p->minSize);
   if (value <= 0.0)
     value = 1e-6;
   return value;
